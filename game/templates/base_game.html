@@ -11,9 +11,9 @@
     integrity="sha384-TX8t27EcRE3e/ihU7zmQxVncDAy5uIKz4rEkgIXeMed4M0jlfIDPvg6uqKI2xXr2" crossorigin="anonymous">
 
   <link rel="stylesheet" type='text/css' href="/static/chessboardjs/css/chessboard-1.0.0.css">
+
   <title>
     {% block title %}
-
     {% endblock %}
   </title>
 
@@ -46,6 +46,27 @@
 
 
       <ul class="navbar-nav ml-auto">
+
+        {% if current_user.is_authenticated  %}
+        <li class="nav-item active">
+          <a class="nav-link" href="#"> Welcome {{ current_user.username}}</a>
+        </li>
+
+        <li class="nav-item active">
+          <a class="nav-link" href="#" style="color:lawngreen; font-weight:font-weight-bold;">
+            <i class="fas  fa-coins"></i>
+            {{current_user.prettier_budget}}
+          </a>
+        </li>
+
+        <li class="nav-item active">
+          <a class="nav-link" href="{{url_for('logout')}}" style="color:oxblood; font-weight:font-weight-bold;">
+            Logout
+          </a>
+        </li>
+
+
+        {% else   %}
         <li class="nav-item active">
           <a class="nav-link" href="{{url_for('login_page')}}">Login <span class="sr-only">(current)</span></a>
         </li>
@@ -53,6 +74,8 @@
         <li class="nav-item active">
           <a class="nav-link" href="{{url_for('register_page')}}">Register <span class="sr-only"></span></a>
         </li>
+        {% endif %}
+
       </ul>
 
     </div>
@@ -67,152 +90,185 @@
 
   <script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
 
-  <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
   <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.bundle.min.js"></script>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/bootbox.js/5.5.2/bootbox.min.js"></script>
   <script src="/static/chessjs/chess.js"></script>
   <script src="/static/chessboardjs/js/chessboard-1.0.0.js"></script>
 
-  <script src="/static/socketio-client/socket.io.js"></script>
 
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/3.1.3/socket.io.js"></script>
 
 
   <script>
 
-    $(document).ready(function () {
-
-      var board = null
-      var game = new Chess()
-      var $status = $('#status')
-      var $fen = $('#fen')
-      var $pgn = $('#pgn')
-      var whiteSquareGrey = '#a9a9a9'
-      var blackSquareGrey = '#696969'
-      var multiPlayer = false;
-
-      function removeGreySquares() {
-        $('#chess_board .square-55d63').css('background', '')
-      }
-
-      function greySquare(square) {
-        var $square = $('#chess_board .square-' + square)
-
-        var background = whiteSquareGrey
-        if ($square.hasClass('black-3c85d')) {
-          background = blackSquareGrey
-        }
-
-        $square.css('background', background)
-      }
 
 
-      function onDragStart(source, piece, position, orientation) {
-        // do not pick up pieces if the game is over
-        if (game.game_over()) return false
+    var pathname = window.location.pathname; // Returns path only (/path/example.html)
+    const socket = io.connect('http://127.0.0.1:5000/');
 
-        // only pick up pieces for the side to move
-        if ((game.turn() === 'w' && piece.search(/^b/) !== -1) ||
-          (game.turn() === 'b' && piece.search(/^w/) !== -1)) {
-          return false
-        }
-      }
+    var path_vals = pathname.split("/")
+    if (path_vals[1] == "") {
+      //game owner 
 
-      function onDrop(source, target) {
-
-        removeGreySquares()
-
-        // see if the move is legal
-        var move = game.move({
-          from: source,
-          to: target,
-          promotion: 'q' // NOTE: always promote to a queen for example simplicity
+      socket.on('connect', function () {
+        socket.emit('join_room', {
+          username: "{{username}}",
+          room: "{{current_user.rooms}}",
+          user_type: "host"
         })
-        console.log(move)
-        // illegal move
-        if (move === null) {
-
-          return 'snapback'
-
-        } else if (multiPlayer) {
-          socket.emit("move", move);
-        }
+      })
 
 
+      socket.on('recieve_message', function (data) {
+        let { message } = data
+        game.move(message, { sloppy: true });
+        board.position(game.fen());
+      })
 
-        // make post request to get api
-        $.post('/make_move', { 'fen': game.fen() }, function (data) {
-          //load fen into current board state
-          game.move(data.best_move, { sloppy: true });
+      socket.on('join_room_annoucement', function (data) {
+        let message = `<p class="text-center mb-0 text-dark font-weight-bold"><i class="fa fa-spin fa-cog"></i>${data}</p><img src = "./../static/images/spinner.gif" style = "display:block;" /> <button id="game_start_btn" class="btn btn-sm btn-primary btn-outline">Start Game</button>`
+        createGamePopup(message, 3000)
 
-          // update board position
-          board.position(game.fen());
-          updateStatus()
-        });
+      })
 
-        updateStatus()
-      }
 
-      function onMouseoverSquare(square, piece) {
-        // get list of possible moves for this square
-        var moves = game.moves({
-          square: square,
-          verbose: true
+
+
+    }
+
+
+    if (path_vals[1] == "game") {
+
+
+      socket.on('connect', function () {
+        let room = 'room1'
+        socket.emit('join_room', {
+          username: "{{username}}",
+          room: path_vals[2]
         })
-
-        // exit if there are no moves available for this square
-        if (moves.length === 0) return
-
-        // highlight the square they moused over
-        greySquare(square)
-
-        // highlight the possible squares for this piece
-        for (var i = 0; i < moves.length; i++) {
-          greySquare(moves[i].to)
-        }
-      }
-
-      function onMouseoutSquare(square, piece) {
-        removeGreySquares()
-      }
+      })
 
 
-      // update the board position after the piece snap
-      // for castling, en passant, pawn promotion
-      function onSnapEnd() {
-        board.position(game.fen())
-      }
+      socket.on('recieve_message', function (data) {
+        let { message } = data
+        game.move(message, { sloppy: true });
+        board.position(game.fen());
+      })
 
-      function updateStatus() {
-        var status = ''
 
-        var moveColor = 'White'
-        if (game.turn() === 'b') {
-          moveColor = 'Black'
-        }
 
-        // checkmate?
-        if (game.in_checkmate()) {
-          status = 'Game over, ' + moveColor + ' is in checkmate.'
-        }
+      socket.on('game_started', function (data) {
+        initGame()
+      })
 
-        // draw?
-        else if (game.in_draw()) {
-          status = 'Game over, drawn position'
-        }
 
-        // game still on
-        else {
-          status = moveColor + ' to move'
 
-          // check?
-          if (game.in_check()) {
-            status += ', ' + moveColor + ' is in check'
-          }
-        }
 
-        $status.html(status)
-        $fen.html(game.fen())
-        $pgn.html(game.pgn())
-      }
+
+    }
+
+    function createGamePopup(html, timer) {
+      var dialog = bootbox.dialog({
+        message: html,
+        closeButton: true
+      });
+
+
+      setTimeout(function () {
+        dialog.modal('hide');
+
+      }, timer)
+
+
+    }
+
+
+
+    copyToClipboard("#copyLink")
+    function playComputer() {
+      $("#playComputer").on("click", function () {
+        multiPlayer = false
+        let html = `<p class='text-center mb - 0 text-dark font-weight-bold'><i class='fa fa - spin fa - cog'></i>Loading Assets... Please wait</p><img src = './../static/images/spinner.gif' style = 'display:block;' />`
+        createGamePopup(html, 3000)
+        initGame()
+      })
+    }
+
+    function playFriend() {
+      $("#playFriend").on("click", function () {
+        multiPlayer = true
+        generateLink()
+
+        initGame()
+
+
+      })
+    }
+
+
+    function generateLink() {
+      $.post('/game', { user_id: "{{current_user.id}}" }, function (data) {
+        let html = `<div class='card' style="height:200px">
+          <div class="row">
+          <div id="gameLink" class="alert alert-success">${data} </div> <button id="copyLink" class="btn btn-outline btn-info btn-sm">Copy Link</button>
+          <h4 class="text-dark font-weight-bold"> Waiting for participant to join </h4>
+          </div>
+         
+        </div>`
+        createGamePopup(html, 0)
+      })
+
+
+    }
+
+
+
+
+    function copyToClipboard(element) {
+      var $temp = $("<input>");
+      $("body").append($temp);
+      $temp.val($(element).text()).select();
+      document.execCommand("copy");
+      $temp.remove();
+      console.log('copied')
+    }
+
+
+    function gameStart() {
+      $("#game_start_btn").on("click", function () {
+        $(this).hide()
+        initGame()
+
+      })
+    }
+
+
+    function gameClear() {
+      $("#game_clear_btn").on("click", function () {
+        $(this).show()
+
+      })
+    }
+
+    function initBoard() {
+      board = null
+      game = new Chess()
+      $status = $('#status')
+      $fen = $('#fen')
+      $pgn = $('#pgn')
+      whiteSquareGrey = '#a9a9a9'
+      blackSquareGrey = '#696969'
+      multiPlayer = false;
+      startButton = $("#game_start_ btn").hide()
+      clearbutton = $("#game_clear_ btn").hide()
+      whiteMovesLists = []
+      blackMovesLists = []
+      multiPlayer = true
+    }
+
+
+    function initGame() {
 
       var config = {
         draggable: true,
@@ -221,9 +277,202 @@
         onDrop: onDrop,
         onMouseoutSquare: onMouseoutSquare,
         onMouseoverSquare: onMouseoverSquare,
-        onSnapEnd: onSnapEnd
+        onSnapEnd: onSnapEnd,
+        dropOfBoard: "trash",
+        sparePieces: false,
+        showErrors: 'console'
       }
       board = Chessboard('chess_board', config)
+    }
+
+
+    function startGame() {
+      socket.emit('start_game')
+    }
+
+
+
+
+
+    function hide_controls() {
+      $("#gameControls").hide()
+    }
+    function removeGreySquares() {
+      $('#chess_board .square-55d63').css('background', '')
+    }
+
+    function greySquare(square) {
+      var $square = $('#chess_board .square-' + square)
+
+      var background = whiteSquareGrey
+      if ($square.hasClass('black-3c85d')) {
+        background = blackSquareGrey
+      }
+
+      $square.css('background', background)
+    }
+
+
+    function onDragStart(source, piece, position, orientation) {
+      // do not pick up pieces if the game is over
+      if (game.game_over()) return false
+
+      // only pick up pieces for the side to move
+      if ((game.turn() === 'w' && piece.search(/^b/) !== -1) ||
+        (game.turn() === 'b' && piece.search(/^w/) !== -1)) {
+        return false
+      }
+    }
+
+    function onDrop(source, target) {
+
+      removeGreySquares()
+
+      // see if the move is legal
+      var move = game.move({
+        from: source,
+        to: target,
+        promotion: 'q' // NOTE: always promote to a queen for example simplicity
+      })
+      //console.log(move)
+
+
+      // illegal move
+      if (move === null) {
+
+        return 'snapback'
+
+      } else if (multiPlayer) {
+        //send to socket 
+
+        console.log('multiplayer is ', multiPlayer)
+
+
+        socket.emit('send_message', {
+          username: "{{username}}",
+          room: "room1",
+          message: move
+        })
+
+
+
+      } else {
+        console.log('multiplayer is ', multiPlayer)
+
+        console.log('current FEN ', game.fen())
+        $.post('/make_move', { 'fen': game.fen() }, function (data) {
+          console.log('SERVER DATA', data)
+          //load fen into current board state
+          game.move(data.best_move, { sloppy: true });
+
+          // update board position
+          board.position(game.fen());
+          updateStatus()
+        });
+      }
+
+
+
+
+      updateStatus()
+    }
+
+
+
+
+
+
+
+    function flipOrientation() {
+      $('#flipOrientationBtn').on('click', board.flip)
+
+    }
+
+    function onMouseoverSquare(square, piece) {
+      // get list of possible moves for this square
+      var moves = game.moves({
+        square: square,
+        verbose: true
+      })
+
+      // exit if there are no moves available for this square
+      if (moves.length === 0) return
+
+      // highlight the square they moused over
+      greySquare(square)
+
+      // highlight the possible squares for this piece
+      for (var i = 0; i < moves.length; i++) {
+        greySquare(moves[i].to)
+      }
+    }
+
+    function onMouseoutSquare(square, piece) {
+      removeGreySquares()
+    }
+
+
+    // update the board position after the piece snap
+    // for castling, en passant, pawn promotion
+    function onSnapEnd() {
+      board.position(game.fen())
+    }
+
+    function updateStatus() {
+      var status = ''
+
+      var moveColor = 'White'
+      if (game.turn() === 'b') {
+        moveColor = 'Black'
+      }
+
+      // checkmate?
+      if (game.in_checkmate()) {
+        status = 'Game over, ' + moveColor + ' is in checkmate.'
+      }
+
+      // draw?
+      else if (game.in_draw()) {
+        status = 'Game Drawn'
+      }
+
+      // game still on
+      else {
+        status = moveColor + ' to move'
+
+        // check?
+        if (game.in_check()) {
+          status += ', ' + moveColor + ' is in check'
+        }
+      }
+
+      let output = document.createElement('h4')
+      output.innerHTML = status
+      statusDiv = $("#status_div");
+      statusDiv.html(output)
+
+
+      $status.html(status)
+      $fen.html(game.fen())
+      $pgn.html(game.pgn())
+    }
+
+
+
+
+
+    $(document).ready(function () {
+
+
+
+      initBoard()
+      gameStart()
+      playComputer()
+      playFriend()
+
+
+
+
 
       updateStatus()
 
@@ -232,23 +481,13 @@
       // setup my socket client
 
 
-      const startMultiPlayer = function () {
-        var socket = io(5000);
 
-        window.onclick = function (e) {
-          socket.emit('message', 'socket working rld!');
-        };
 
-        socket.on('move', function (msg) {
-          game.move(msg);
-          board.position(game.fen()); // fen is the board layout
-        });
-
-      }
 
     })
 
   </script>
+
 
 
 </body>

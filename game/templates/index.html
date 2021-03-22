@@ -2,28 +2,36 @@
 
 
 {% block content %}
-<div class='col-8 mx-auto'>
+<div class='col-12 mx-auto'>
   <div class='card mt-5'>
     <div class='card-body'>
       <div class="row">
         <div class="col-6">
-          <div class="col-12" id="chess_board"></div>
+          <div class="col-sm-12 col-md-12 col-lg-8" id="chess_board"></div>
+
+
+          <button id="flipOrientationBtn" class="btn btn-sm btn-primary btn-outline" style="display: none;">Change
+            Orientation</button>
+
         </div>
 
-        <div class="col-6">
+        <div class="col-sm-12 col-md-12 col-lg-4">
+          <img id="loading-image" src="./../static/images/spinner.gif" style="display:none;" />
 
-          <div class="col-12 my-5">
-            <span class="btn btn-outline btn-block btn-success">Create New Tournament</span>
+          <div class="col-12 my-5" id="gameControls">
+            <span id="createGame" class="btn btn-outline btn-block btn-success">Create New Tournament</span>
 
-            <span class="btn btn-outline btn-block btn-primary">Play With Computer </span>
+            <span id="playComputer" class="btn btn-outline btn-block btn-primary">Play With Computer </span>
 
 
-            <span class="btn btn-outline btn-block btn-info">Play With Friend</span>
+            <span id="playFriend" class="btn btn-outline btn-block btn-info">Play With Friend</span>
 
             <span class="btn btn-outline btn-block btn-primary">Create A Room Computer </span>
 
             <span class="btn btn-outline btn-block btn-primary">Join A Room </span>
           </div>
+
+          <div id="status_div" style="background-color: #222222; color:lawngreen; "></div>
         </div>
 
         <div class="col">
